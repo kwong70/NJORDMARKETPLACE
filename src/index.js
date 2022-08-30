@@ -8,10 +8,11 @@ import {
   Routes,
   Route,
 } from "react-router-dom";
-import SellNFT from './components/SellNFT';
+import CreateNFT from './components/CreateNFT';
 import Marketplace from './components/Marketplace';
 import Profile from './components/Profile';
 import NFTPage from './components/NFTpage';
+import RepaymentTile from './components/RepaymentTile';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
@@ -19,9 +20,10 @@ root.render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<Marketplace />}/>
-        <Route path="/sellNFT" element={<SellNFT />}/> 
+        <Route path="/CreateNFT" element={<CreateNFT />}/> 
         <Route path="/nftPage/:tokenId" element={<NFTPage />}/>        
         <Route path="/profile" element={<Profile />}/> 
+        <Route path="/nftRepayment/:tokenId" element={<RepaymentTile/>}/>
       </Routes>
     </BrowserRouter>
   </React.StrictMode>

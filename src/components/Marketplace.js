@@ -16,15 +16,12 @@ async function getAllNFTs() {
     const signer = provider.getSigner();
     //Pull the deployed contract instance
     let contract = new ethers.Contract(MarketplaceJSON.address, MarketplaceJSON.abi, signer)
-    //create an NFT Token
     let transaction = await contract.getAllNFTs()
-
     //Fetch all the details of every NFT from the contract and display
     const items = await Promise.all(transaction.map(async i => {
         const tokenURI = await contract.tokenURI(i.tokenId);
         let meta = await axios.get(tokenURI);
         meta = meta.data;
-
         let price = ethers.utils.formatUnits(i.price.toString(), 'ether');
         let item = {
             price,

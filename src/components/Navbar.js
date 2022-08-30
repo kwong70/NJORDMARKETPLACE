@@ -48,7 +48,6 @@ async function connectWebsite() {
     await window.ethereum.request({ method: 'eth_requestAccounts' })
       .then(() => {
         updateButton();
-        console.log("here");
         getAddress();
         window.location.replace(location.pathname)
       });
@@ -58,7 +57,6 @@ async function connectWebsite() {
     let val = window.ethereum.isConnected();
     if(val)
     {
-      console.log("here");
       getAddress();
       toggleConnect(val);
       updateButton();
@@ -75,10 +73,9 @@ async function connectWebsite() {
           <ul className='flex items-end justify-between py-3 bg-transparent text-white pr-5'>
           <li className='flex items-end ml-5 pb-2'>
             <Link to="/">
-            <img src={fullLogo} alt="" width={120} height={120} className="inline-block -mt-2"/>
-            <div className='inline-block font-bold text-xl ml-2'>
-              NFT Marketplace
-            </div>
+              <div className='inline-block font-bold text-xl ml-2'>
+                NJORD Marketplace
+              </div>
             </Link>
           </li>
           <li className='w-2/6'>
@@ -92,13 +89,13 @@ async function connectWebsite() {
                 <Link to="/">Marketplace</Link>
               </li>              
               }
-              {location.pathname === "/sellNFT" ? 
+              {location.pathname === "/createNFT" ? 
               <li className='border-b-2 hover:pb-0 p-2'>
-                <Link to="/sellNFT">List My NFT</Link>
+                <Link to="/createNFT">Create NFT</Link>
               </li>
               :
               <li className='hover:border-b-2 hover:pb-0 p-2'>
-                <Link to="/sellNFT">List My NFT</Link>
+                <Link to="/createNFT">Create NFT</Link>
               </li>              
               }              
               {location.pathname === "/profile" ? 

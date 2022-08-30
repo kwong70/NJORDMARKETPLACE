@@ -21,6 +21,7 @@ contract NFTMarketplace is ERC721URIStorage {
     uint256 listPrice = 0.01 ether;
     //Enums for state of an NFT 
     enum NFTState { HOLD, SELL, REPAYMENT }
+    enum BNPLOutcome { SUCCESS, DEFAULT }
 
     //The structure to store info about a listed token
     struct ListedToken {
@@ -29,6 +30,7 @@ contract NFTMarketplace is ERC721URIStorage {
         address payable seller;
         uint256 price;
         NFTState nftState;
+        Repayment repayment;
     }
 
     //the event emitted when a token is successfully listed
@@ -37,8 +39,42 @@ contract NFTMarketplace is ERC721URIStorage {
         address owner,
         address seller,
         uint256 price,
-        NFTState nftState
+        NFTState nftState, 
+        Repayment repayment
     );
+
+    event BNPLPaymentEvent (
+        uint256 indexed tokenId,
+        uint256 amountPaid,
+        uint256 totalAmountPaid,
+        uint256 totalDue,
+        uint256 startTime, 
+        uint256 loanLength,
+        uint256 payPeriodAmount,
+        uint256 payPeriodLength, 
+        address seller, 
+        address buyer
+    );
+
+    struct Repayment {
+        uint256 startTime; // start of the loan time
+        uint256 totalDue; // 
+        uint256 amountPaidOff; // total amount of loan paid off. amountPaidOff == intitialPrice + (initialPrice * interest) in order to complete loan
+        uint256 loanLength; // total length of loan
+        uint256 payPeriodLength; // amount of time alotted to pay payPeriodAmount
+        uint256 payPeriodAmount; // amount due before payPeriodLength is up
+        address renter;
+    }
+
+    event BNPLOutcomeEvent (
+        uint256 indexed tokenId,
+        Repayment repayment,
+        address seller, 
+        address buyer, 
+        BNPLOutcome outcome
+    );
+
+    
 
     //This mapping maps tokenId to token info and is helpful when retrieving details about a tokenId
     mapping(uint256 => ListedToken) private idToListedToken;
@@ -99,7 +135,8 @@ contract NFTMarketplace is ERC721URIStorage {
             payable(address(this)),
             payable(msg.sender),
             price,
-            NFTState.HOLD
+            NFTState.HOLD, 
+            Repayment(0,0,0,0,0,0, address(0))
         );
 
         //Update the mapping of tokenId's to Token details, useful for retrieval functions
@@ -112,36 +149,42 @@ contract NFTMarketplace is ERC721URIStorage {
             tokenMetaData.owner,
             tokenMetaData.seller,
             tokenMetaData.price,
-            tokenMetaData.nftState
+            tokenMetaData.nftState, 
+            tokenMetaData.repayment
         );
     }
 
-    function listToken(uint256 tokenId, uint price) public returns (ListedToken memory) {
+    function listToken(uint256 tokenId, uint price) public payable returns (ListedToken memory) {
+        require(msg.value == listPrice, "Hopefully sending the correct price");
         // get the token 
-        ListedToken memory nft = idToListedToken[tokenId];
+        ListedToken storage nft = idToListedToken[tokenId];
         // check if user owns/has the ability to sell nft 
         require(idToListedToken[tokenId].seller == msg.sender, "You do not have rights to sell the NFT");
         // set the nft state to sell 
         nft.nftState = NFTState.SELL;
         // overwrite the sell price 
         nft.price = price;
-        // write/update nft details back to memory
-        idToListedToken[tokenId] = nft; 
         //update the current selling nft counter 
         _itemsOnTheMarket.increment();
-
+        emit TokenListedSuccess(
+            tokenId,
+            nft.owner, 
+            nft.seller, 
+            nft.price, 
+            nft.nftState,
+            nft.repayment
+        );
         return nft;
     }
 
-    function updateTokenPrice(uint256 tokenId, uint price) public returns (ListedToken memory) {
+    function updateTokenPrice(uint256 tokenId, uint price) public payable returns (ListedToken memory) {
+        require(msg.value == listPrice, "Hopefully sending the correct price");
         // get the token 
-        ListedToken memory nft = idToListedToken[tokenId];
+        ListedToken storage nft = idToListedToken[tokenId];
         // check if user owns/has the ability to sell nft 
         require(idToListedToken[tokenId].seller == msg.sender, "You do not have rights to update the NFT");
         // overwrite the sell price 
         nft.price = price;
-        // write/update nft details back to memory
-        idToListedToken[tokenId] = nft; 
         return nft;
     }
     //This will return all the NFTs currently listed to be sold on the marketplace
@@ -170,7 +213,7 @@ contract NFTMarketplace is ERC721URIStorage {
         
         //Important to get a count of all the NFTs that belong to the user before we can make an array for them
         for(uint i=1; i <= totalItemCount; i++) {
-            if(idToListedToken[i].owner == msg.sender || idToListedToken[i].seller == msg.sender){
+            if(idToListedToken[i].owner == msg.sender || idToListedToken[i].seller == msg.sender || idToListedToken[i].repayment.renter == msg.sender ){
                 itemCount++;
             }
         }
@@ -178,7 +221,7 @@ contract NFTMarketplace is ERC721URIStorage {
         //Once you have the count of relevant NFTs, create an array then store all the NFTs in it
         ListedToken[] memory items = new ListedToken[](itemCount);
         for(uint i=1; i <= totalItemCount; i++) {
-            if(idToListedToken[i].owner == msg.sender || idToListedToken[i].seller == msg.sender) {
+            if(idToListedToken[i].owner == msg.sender || idToListedToken[i].seller == msg.sender || idToListedToken[i].repayment.renter == msg.sender) {
                 uint currentId = i;
                 ListedToken storage currentItem = idToListedToken[currentId];
                 items[currentIndex++] = currentItem;
@@ -200,7 +243,7 @@ contract NFTMarketplace is ERC721URIStorage {
 
         //Actually transfer the token to the new owner
         _transfer(address(this), msg.sender, tokenId);
-        //approve the marketplace to sell NFTs on your behalf
+        //give the marketplace the rights to sell the NFT agian in the future on behalf of msg.sender 
         approve(address(this), tokenId);
 
         //Transfer the listing fee to the marketplace creator
@@ -209,7 +252,51 @@ contract NFTMarketplace is ERC721URIStorage {
         payable(seller).transfer(msg.value);
     }
 
-    //We might add a resell token function in the future
-    //In that case, tokens won't be listed by default but users can send a request to actually list a token
-    //Currently NFTs are listed by default
+    function initiateBNPL(uint256 tokenId, uint256 loanLength, uint256 payPeriod, uint256 totalDue, uint256 payPeriodAmount) public payable {
+        ListedToken storage nft = idToListedToken[tokenId];
+        Repayment memory repaymentDetails = Repayment(
+            block.timestamp,
+            totalDue,
+            0,
+            loanLength,
+            payPeriod,
+            payPeriodAmount,
+            msg.sender
+        );
+
+        //update the details of the token
+        nft.nftState = NFTState.REPAYMENT;
+        nft.repayment = repaymentDetails;
+        _itemsOnTheMarket.decrement();
+    }
+
+    function makeBNPLPayment(uint256 tokenId) public payable {
+        ListedToken storage nft = idToListedToken[tokenId];
+        Repayment storage repayment = nft.repayment;
+        require(repayment.renter ==  msg.sender, "You do not have permission to make a BNPL payment");
+
+        repayment.amountPaidOff += msg.value;
+        emit BNPLPaymentEvent(tokenId, msg.value, repayment.amountPaidOff, repayment.totalDue, repayment.startTime, repayment.loanLength, repayment.payPeriodAmount, repayment.payPeriodLength, nft.seller, repayment.renter);
+
+        // handle success
+        if(repayment.amountPaidOff >= repayment.totalDue) {
+            //Actually transfer the token to the new owner
+            _transfer(address(this), msg.sender, tokenId);
+            //give the marketplace the rights to sell the NFT agian in the future on behalf of msg.sender 
+            approve(address(this), tokenId);
+            // Emit Successfull BNPLOutcomeEvent 
+            emit BNPLOutcomeEvent(tokenId, repayment, nft.seller, repayment.renter, BNPLOutcome.SUCCESS);
+            // Update application state
+            _itemsSold.increment();
+            nft.repayment =  Repayment(0,0,0,0,0,0, address(0));
+            nft.nftState = NFTState.HOLD;
+            nft.seller = payable(msg.sender);
+        } 
+
+        //Transfer the proceeds from the sale to the seller of the NFT
+        payable(nft.seller).transfer(msg.value);
+
+    }
+
+    
 }
